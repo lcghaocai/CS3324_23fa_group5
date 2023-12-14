@@ -9,16 +9,18 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import transforms
-import torchvision.models as models
+from torchvision.models import resnet50, ResNet50_Weights
 
 filedir = '.'
-save_path = './resnet50.pth'
+save_path = './resnet50_imagenet_v2.pth'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 batch_size = 8
 num_workers = 8
 split_rate = 0.9
-lr = 1e-3
-epochs = 20
+lr = 1e-4
+epochs = 10
+weight = ResNet50_Weights.IMAGENET1K_V2
+
 
 class MySet(Dataset):
     def __init__(self, data_path, label_file):
@@ -26,7 +28,7 @@ class MySet(Dataset):
         data_path = os.path.normpath(data_path)
         label_file = os.path.normpath(label_file)
         self.data = []
-        transf = transforms.ToTensor()
+        transf = transforms.Compose([transforms.ToTensor(), weight.transforms(antialias=True)])
         for file_name in os.listdir(data_path):
             self.data.append([transf(Image.open(os.path.join(data_path, file_name)).convert('RGB')), file_name])
         self.labels = pd.read_csv(label_file)
@@ -81,7 +83,7 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, drop_last=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-    net = models.resnet50()
+    net = resnet50(weight)
     net.cuda()
     optimizer = optim.Adam(net.parameters(), lr = lr)
     criterion = nn.CrossEntropyLoss()
