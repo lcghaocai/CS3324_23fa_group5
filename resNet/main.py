@@ -2,11 +2,13 @@ import os
 from PIL import Image
 import torch
 import random
+import logging
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch import randperm
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import transforms
 from torchvision.models import resnet50, ResNet50_Weights
@@ -39,6 +41,10 @@ class MySet(Dataset):
     def __getitem__(self, index):
         image = self.data[index]
         return image[0], self.labels.loc[image[1], 'Hypertensive']
+
+    def retrieve(self, index):
+        return self.data[index][1]
+        
     def __len__(self):
         return self.size
 
@@ -72,6 +78,11 @@ def eval(epoch):
             val_loss += loss.item()*data.size(0)
     val_loss /= len(test_loader.dataset)
     true_label, pred_label = np.concatenate(true_label), np.concatenate(pred_label)
+    for i in range(len(true_label)):
+        eq = true_label[i] == pred_label[i]
+        file_name = raw_data.retrieve(train_size + i)
+        log.info(f'Epoch: {epoch}, file name: {file_name}, success: {eq}')
+ 
     acc = np.sum(true_label == pred_label) / len(pred_label)
     print('Epoch: {}, Validation Loss:{:6f}, Accuracy: {:6f}'.format(epoch, val_loss, acc))
  
@@ -79,7 +90,10 @@ if __name__ == '__main__':
     raw_data = MySet( filedir + "/1-Images/1-Training Set", filedir + "/2-Groundtruths/HRDC Hypertensive Classification Training Labels.csv")
     train_size = int(len(raw_data) * split_rate)
     test_size = len(raw_data) - train_size
-    train_data, test_data = random_split(raw_data, [train_size, test_size])
+    raw_index = randperm(len(raw_data)).tolist()
+    train_data = torch.utils.data.Subset(raw_data, raw_index[:train_size])
+    test_data = torch.utils.data.Subset(raw_data, raw_index[train_size:])
+    # train_data, test_data = random_split(raw_data, [train_size, test_size])
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, drop_last=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
@@ -87,7 +101,14 @@ if __name__ == '__main__':
     net.cuda()
     optimizer = optim.Adam(net.parameters(), lr = lr)
     criterion = nn.CrossEntropyLoss()
-
+    log = logging.getLogger()
+    log.setLevel(logging.INFO) # Log等级总开关
+    logfile = './log.txt'
+    fh = logging.FileHandler(logfile, mode='a') # open的打开模式这里可以进行参考 
+    formatter = logging.Formatter("%(asctime)s - line:%(lineno)d - %(levelname)s==> %(message)s")
+    fh.setFormatter(formatter)
+    log.addHandler(fh)
+       
     for epoch in range(epochs):
         train(epoch + 1)
         eval(epoch + 1)

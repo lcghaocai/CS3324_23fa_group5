@@ -1,3 +1,4 @@
 /1-Images
 /2-Groundtruths
 *.pth
+log.txt
