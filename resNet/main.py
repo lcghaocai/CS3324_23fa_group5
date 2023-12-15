@@ -24,20 +24,26 @@ lr = 1e-3
 epochs = 10
 weight = ResNet50_Weights.IMAGENET1K_V2
 first = True
+qfe_size = 3
 
 def preprocess(image):
     # TODO
     return image
-
+def qfe(image, file_name, transf):
+    res_list = []
+    for i in range(qfe_size):
+        res_list.append([transf(image), file_name])
+    return res_list
+    
 class MySet(Dataset):
     def __init__(self, data_path, label_file):
         self.current = 0
         data_path = os.path.normpath(data_path)
         label_file = os.path.normpath(label_file)
         self.data = []
-        transf = transforms.Compose([preprocess, transforms.ToPILImage(), transforms.ToTensor(), weight.transforms(antialias=True)])
+        transf = transforms.Compose([ transforms.ToPILImage(), transforms.RandomRotation(180), transforms.ToTensor(), weight.transforms(antialias=True)])
         for file_name in os.listdir(data_path):
-            self.data.append([transf(cv2.imread(os.path.join(data_path, file_name))), file_name])
+            self.data += qfe(cv2.imread(os.path.join(data_path, file_name)), file_name, transf)
         self.labels = pd.read_csv(label_file)
         print(self.labels.shape)
         self.labels.set_index('Image', inplace=True)
@@ -56,16 +62,23 @@ class MySet(Dataset):
 def train(epoch):
     net.train()
     train_loss = 0
+    true_label = []
+    pred_label = []
     for data, label in train_loader:
         data, label = data.cuda(), label.cuda()
         optimizer.zero_grad()
         output = net(data)
+        pred = torch.argmax(output, 1)
+        true_label.append(label.cpu().data.numpy())
+        pred_label.append(pred.cpu().data.numpy())
         loss = criterion(output, label)
         loss.backward()
         optimizer.step()
         train_loss += loss.item()*data.size(0)
     train_loss /= len(train_loader.dataset)
-    print('Epoch: {}, Train Loss:{:6f}'.format(epoch, train_loss))    
+    true_label, pred_label = np.concatenate(true_label), np.concatenate(pred_label)
+    acc = np.sum(true_label == pred_label) / len(pred_label)
+    print('Epoch: {}, Train Loss: {:6f}, accuracy: {:6f}'.format(epoch, train_loss, acc))    
 
 def eval(epoch):
     net.eval()
