@@ -1,5 +1,6 @@
 import os
 from PIL import Image
+import cv2
 import torch
 import random
 import logging
@@ -16,13 +17,17 @@ from torchvision.models import resnet50, ResNet50_Weights
 filedir = '.'
 save_path = './resnet50_imagenet_v2.pth'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-batch_size = 8
+batch_size = 16
 num_workers = 8
 split_rate = 0.9
-lr = 1e-4
+lr = 1e-3
 epochs = 10
 weight = ResNet50_Weights.IMAGENET1K_V2
+first = True
 
+def preprocess(image):
+    # TODO
+    return image
 
 class MySet(Dataset):
     def __init__(self, data_path, label_file):
@@ -30,9 +35,9 @@ class MySet(Dataset):
         data_path = os.path.normpath(data_path)
         label_file = os.path.normpath(label_file)
         self.data = []
-        transf = transforms.Compose([transforms.ToTensor(), weight.transforms(antialias=True)])
+        transf = transforms.Compose([preprocess, transforms.ToPILImage(), transforms.ToTensor(), weight.transforms(antialias=True)])
         for file_name in os.listdir(data_path):
-            self.data.append([transf(Image.open(os.path.join(data_path, file_name)).convert('RGB')), file_name])
+            self.data.append([transf(cv2.imread(os.path.join(data_path, file_name))), file_name])
         self.labels = pd.read_csv(label_file)
         print(self.labels.shape)
         self.labels.set_index('Image', inplace=True)
@@ -82,25 +87,11 @@ def eval(epoch):
         eq = true_label[i] == pred_label[i]
         file_name = raw_data.retrieve(train_size + i)
         log.info(f'Epoch: {epoch}, file name: {file_name}, success: {eq}')
- 
+    my_lr_scheduler.step()
     acc = np.sum(true_label == pred_label) / len(pred_label)
     print('Epoch: {}, Validation Loss:{:6f}, Accuracy: {:6f}'.format(epoch, val_loss, acc))
  
 if __name__ == '__main__':
-    raw_data = MySet( filedir + "/1-Images/1-Training Set", filedir + "/2-Groundtruths/HRDC Hypertensive Classification Training Labels.csv")
-    train_size = int(len(raw_data) * split_rate)
-    test_size = len(raw_data) - train_size
-    raw_index = randperm(len(raw_data)).tolist()
-    train_data = torch.utils.data.Subset(raw_data, raw_index[:train_size])
-    test_data = torch.utils.data.Subset(raw_data, raw_index[train_size:])
-    # train_data, test_data = random_split(raw_data, [train_size, test_size])
-    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, drop_last=True)
-    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-
-    net = resnet50(weight)
-    net.cuda()
-    optimizer = optim.Adam(net.parameters(), lr = lr)
-    criterion = nn.CrossEntropyLoss()
     log = logging.getLogger()
     log.setLevel(logging.INFO) # Log等级总开关
     logfile = './log.txt'
@@ -108,6 +99,25 @@ if __name__ == '__main__':
     formatter = logging.Formatter("%(asctime)s - line:%(lineno)d - %(levelname)s==> %(message)s")
     fh.setFormatter(formatter)
     log.addHandler(fh)
+    
+    raw_data = MySet( filedir + "/1-Images/1-Training Set", filedir + "/2-Groundtruths/HRDC Hypertensive Classification Training Labels.csv")
+    train_size = int(len(raw_data) * split_rate)
+    test_size = len(raw_data) - train_size
+    raw_index = randperm(len(raw_data)).tolist()
+    train_data = torch.utils.data.Subset(raw_data, raw_index[:train_size])
+    test_data = torch.utils.data.Subset(raw_data, raw_index[train_size:])
+    # train_data, test_data = random_split(raw_data, [train_size, test_size])
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
+    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+    net = resnet50(weight)
+    net.cuda()
+    optimizer = optim.Adam(net.parameters(), lr = lr)
+    decayRate = 0.96
+    my_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
+    criterion = nn.CrossEntropyLoss()
+    
+   
        
     for epoch in range(epochs):
         train(epoch + 1)
