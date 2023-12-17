@@ -19,7 +19,7 @@ filedir = '.'
 save_path = './densenet121_imagenet.pth'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 batch_size = 16
-num_workers = 4
+num_workers = 0
 split_rate = 0.9
 lr = 1e-3
 epochs = 20
@@ -27,9 +27,60 @@ weight = ResNet50_Weights.IMAGENET1K_V2
 first = True
 qfe_size = 3
 
+
+
+# 训练集图像路径
+train_image_dir = "/kaggle/input/trainingset/1-Images/1-Training Set/"
+
+# 图像尺寸
+image_size = (224, 224)
+
+# 用于计算均值和标准差的变量
+mean = np.zeros(3)
+std = np.zeros(3)
+num_images = 0
+
+
+# 遍历训练集图像
+for image_file in os.listdir(train_image_dir):
+    if image_file.endswith(".png"):
+        # 加载图像并转换为 NumPy 数组
+        image_path = os.path.join(train_image_dir, image_file)
+        image = Image.open(image_path).convert("RGB")
+        image = image.resize(image_size)
+        image_array = np.array(image) / 255.0  # 将像素值缩放到 [0, 1] 范围内
+
+        # 更新均值和标准差
+        mean += np.mean(image_array, axis=(0, 1))
+        std += np.std(image_array, axis=(0, 1))
+        num_images += 1
+
+# 计算均值和标准差
+mean /= num_images
+std /= num_images
+
+print("均值：", mean)
+print("标准差：", std)
+
+
 def preprocess(image):
-    # TODO
+    # Convert the image to PIL Image format
+    image = Image.fromarray(image)
+
+    # Resize the image to the required input size of DenseNet
+    image = image.resize(image_size)
+
+    # Convert the image to tensor
+    image = transforms.ToTensor()(image)
+
+    # Normalize the image
+    normalize = transforms.Normalize(mean, std)
+    image = normalize(image)
+
     return image
+
+
+
 def qfe(image, file_name, transf):
     res_list = []
     for i in range(qfe_size):
@@ -42,7 +93,8 @@ class MySet(Dataset):
         data_path = os.path.normpath(data_path)
         label_file = os.path.normpath(label_file)
         self.data = []
-        transf = transforms.Compose([ transforms.ToPILImage(), transforms.RandomRotation(180), transforms.ToTensor(), weight.transforms(antialias=True)])
+        transf = transforms.Compose([preprocess, transforms.RandomRotation(180), weight.transforms(antialias=True)])
+        #transf = transforms.Compose([ transforms.ToPILImage(), transforms.RandomRotation(180), transforms.ToTensor(), weight.transforms(antialias=True)])
         for file_name in os.listdir(data_path):
             self.data += qfe(cv2.imread(os.path.join(data_path, file_name)), file_name, transf)
         self.labels = pd.read_csv(label_file)
@@ -112,7 +164,7 @@ if __name__ == '__main__':
     fh = logging.FileHandler(logfile, mode='a') # open的打开模式这里可以进行参考 
     formatter = logging.Formatter("%(asctime)s - line:%(lineno)d - %(levelname)s==> %(message)s")
     fh.setFormatter(formatter)
-    log.addHandler(fh)
+    log.addHandler(fh)  
     
     raw_data = MySet( "/kaggle/input/trainingset/1-Images/1-Training Set",  "/kaggle/input/groundtruths/2-Groundtruths/HRDC Hypertensive Classification Training Labels.csv")
     train_size = int(len(raw_data) * split_rate)
@@ -124,12 +176,20 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
+    
+    
+    
+    
     net = densenet121(pretrained=True)
     # 获取原始DenseNet的输入通道数
     in_features = net.classifier.in_features
 
-    # 创建新的全连接层，输出类别数为2（假设有两个类别）
-    net.classifier = nn.Linear(in_features, 2)
+    # 创建新的全连接层，输出类别数为2
+    
+    net.classifier = nn.Sequential(
+    nn.Dropout(0.5),  # 添加Dropout层，丢弃概率为0.5
+    nn.Linear(in_features, 2)
+    )
     net.cuda()
     optimizer = optim.Adam(net.parameters(), lr = lr)
     decayRate = 0.96
