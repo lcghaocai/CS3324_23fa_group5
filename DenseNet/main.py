@@ -13,19 +13,19 @@ from torch import randperm
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision import transforms
 from torchvision.models import resnet50, ResNet50_Weights
-from torchvision.models import densenet121
+from torchvision.models import densenet121,DenseNet121_Weights
 
 filedir = '.'
 save_path = './densenet121_imagenet.pth'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 batch_size = 16
-num_workers = 0
-split_rate = 0.9
-lr = 1e-3
-epochs = 20
-weight = ResNet50_Weights.IMAGENET1K_V2
+num_workers =4 
+split_rate = 0.8
+lr = 1e-4
+epochs = 10
+weight = DenseNet121_Weights.IMAGENET1K_V1
 first = True
-qfe_size = 3
+qfe_size = 4
 
 
 
@@ -184,8 +184,8 @@ if __name__ == '__main__':
     # 获取原始DenseNet的输入通道数
     in_features = net.classifier.in_features
 
-    # 创建新的全连接层，输出类别数为2
     
+    # 创建新的全连接层，输出类别数为2（假设有两个类别）
     net.classifier = nn.Sequential(
     nn.Dropout(0.5),  # 添加Dropout层，丢弃概率为0.5
     nn.Linear(in_features, 2)
@@ -202,3 +202,5 @@ if __name__ == '__main__':
         train(epoch + 1)
         eval(epoch + 1)
     torch.save(net, save_path)
+
+    

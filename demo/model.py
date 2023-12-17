@@ -20,11 +20,11 @@ filedir = '..'
 
 class model:
     def __init__(self):
-        self.checkpoint = "densenet121_imagenet.pth"
+        self.checkpoint = "/densenet121_imagenet.pth"
         self.device = torch.device("cpu")
 
     def load(self, dir_path):
-        self.model = densenet121(pretrained=False)
+        self.model = densenet121(pretrained=True)
         checkpoint_path = os.path.join(dir_path, self.checkpoint)
         self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
         self.model.to(self.device)
@@ -52,16 +52,16 @@ class model:
         return pred_class
 
 
-class ResNet34(nn.Module):
-    def __init__(self, num_classes=2, pretrained=False):
-        super(ResNet34, self).__init__()
-        self.resnet = models.resnet34(pretrained=pretrained)
-        num_features = self.resnet.fc.in_features
-        self.resnet.fc = nn.Linear(in_features=num_features, out_features=num_classes)
+# class ResNet34(nn.Module):
+#     def __init__(self, num_classes=2, pretrained=False):
+#         super(ResNet34, self).__init__()
+#         self.resnet = models.resnet34(pretrained=pretrained)
+#         num_features = self.resnet.fc.in_features
+#         self.resnet.fc = nn.Linear(in_features=num_features, out_features=num_classes)
 
-    def forward(self, x):
-        x = self.resnet(x)
-        return x
+#     def forward(self, x):
+#         x = self.resnet(x)
+#         return x
 
 class dataSet:
     def __init__(self, data_path, label_file):
