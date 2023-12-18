@@ -1,4 +1,5 @@
 /1-Images
 /2-Groundtruths
+/*/__pycache__
 *.pth
-log.txt
+log*

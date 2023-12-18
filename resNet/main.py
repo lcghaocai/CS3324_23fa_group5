@@ -3,29 +3,39 @@ from PIL import Image
 import cv2
 import torch
 import random
+from datetime import datetime
 import logging
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from model import *
 from torch import randperm
-from torch.utils.data import Dataset, DataLoader, random_split
-from torchvision import transforms
+from torchvision import transforms, models
 from torchvision.models import resnet50, ResNet50_Weights
 
 filedir = '.'
-save_path = './resnet50_imagenet_v2.pth'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 batch_size = 16
 num_workers = 8
 split_rate = 0.9
-lr = 1e-3
-epochs = 10
+lr = 1e-4
+epochs = 15
+fold_size = 5
 weight = ResNet50_Weights.IMAGENET1K_V2
 first = True
-qfe_size = 3
 
+class ResNet50(nn.Module):
+    def __init__(self, weight):
+        super(ResNet50, self).__init__()
+        self.resnet = models.resnet50(weight)
+        num_features = self.resnet.fc.in_features
+        self.resnet.fc = nn.Linear(in_features=num_features, out_features=2)
+
+    def forward(self, x):
+        x = self.resnet(x)
+        return x
 def preprocess(image):
     # TODO
     return image
@@ -34,30 +44,6 @@ def qfe(image, file_name, transf):
     for i in range(qfe_size):
         res_list.append([transf(image), file_name])
     return res_list
-    
-class MySet(Dataset):
-    def __init__(self, data_path, label_file):
-        self.current = 0
-        data_path = os.path.normpath(data_path)
-        label_file = os.path.normpath(label_file)
-        self.data = []
-        transf = transforms.Compose([ transforms.ToPILImage(), transforms.RandomRotation(180), transforms.ToTensor(), weight.transforms(antialias=True)])
-        for file_name in os.listdir(data_path):
-            self.data += qfe(cv2.imread(os.path.join(data_path, file_name)), file_name, transf)
-        self.labels = pd.read_csv(label_file)
-        print(self.labels.shape)
-        self.labels.set_index('Image', inplace=True)
-        self.size = len(self.data)
-
-    def __getitem__(self, index):
-        image = self.data[index]
-        return image[0], self.labels.loc[image[1], 'Hypertensive']
-
-    def retrieve(self, index):
-        return self.data[index][1]
-        
-    def __len__(self):
-        return self.size
 
 def train(epoch):
     net.train()
@@ -103,27 +89,36 @@ def eval(epoch):
     my_lr_scheduler.step()
     acc = np.sum(true_label == pred_label) / len(pred_label)
     print('Epoch: {}, Validation Loss:{:6f}, Accuracy: {:6f}'.format(epoch, val_loss, acc))
- 
-if __name__ == '__main__':
+
+def log_init():
     log = logging.getLogger()
     log.setLevel(logging.INFO) # Log等级总开关
-    logfile = './log.txt'
-    fh = logging.FileHandler(logfile, mode='a') # open的打开模式这里可以进行参考 
+    logfile = './log_resnet.txt'
+    fh = logging.FileHandler(logfile, mode='w') # open的打开模式这里可以进行参考 
     formatter = logging.Formatter("%(asctime)s - line:%(lineno)d - %(levelname)s==> %(message)s")
     fh.setFormatter(formatter)
     log.addHandler(fh)
+    return log
+
+if __name__ == '__main__':
+    log = log_init()
     
     raw_data = MySet( filedir + "/1-Images/1-Training Set", filedir + "/2-Groundtruths/HRDC Hypertensive Classification Training Labels.csv")
-    train_size = int(len(raw_data) * split_rate)
-    test_size = len(raw_data) - train_size
-    raw_index = randperm(len(raw_data)).tolist()
+    raw_size = len(raw_data)
+    train_size = int(raw_size * split_rate)
+    test_size = raw_size - train_size
+    raw_index = randperm(raw_size).tolist()
+    slice_data = []
+    slice_size = raw_size // fold_size
+    for i in range(fold_size):
+        slice_data.append(torch.utils.data.Subset(raw_data, raw_index[slice_size * i:slice_size * (i + 1)]))
     train_data = torch.utils.data.Subset(raw_data, raw_index[:train_size])
     test_data = torch.utils.data.Subset(raw_data, raw_index[train_size:])
     # train_data, test_data = random_split(raw_data, [train_size, test_size])
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-    net = resnet50(weight)
+    net = ResNet50(weight)
     net.cuda()
     optimizer = optim.Adam(net.parameters(), lr = lr)
     decayRate = 0.96
@@ -135,6 +130,8 @@ if __name__ == '__main__':
     for epoch in range(epochs):
         train(epoch + 1)
         eval(epoch + 1)
+    
+    save_path = f'./resnet50_imagenet_v2_{datetime.now().timestamp()}.pth'
     torch.save(net, save_path)
     
     
