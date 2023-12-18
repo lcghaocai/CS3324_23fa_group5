@@ -42,7 +42,7 @@ class model:
         :param input_image: the input image to the model.
         :return: an int value indicating the class for the input image
         """
-        transf = transforms.Compose([ transforms.ToPILImage(), transforms.ToTensor(), weight.transforms(antialias=True)])
+        transf = transforms.Compose([ transforms.ToPILImage(), transforms.ToTensor(), transforms.RandomRotation(180), weight.transforms()])
         image = torch.unsqueeze(transf(input_image), 0)
 
         with torch.no_grad():
@@ -53,7 +53,27 @@ class model:
         pred_class = int(pred_class)
         return pred_class
 
-    
+def preprocess(image):
+    # TODO
+    return image
+
+def qfe(image, file_name, transf):
+    res_list = []
+    for i in range(qfe_size):
+        res_list.append([transf(image), file_name])
+    return res_list
+
+class ResNet50(nn.Module):
+    def __init__(self, weight):
+        super(ResNet50, self).__init__()
+        self.resnet = models.resnet50(weight)
+        num_features = self.resnet.fc.in_features
+        self.resnet.fc = nn.Linear(in_features=num_features, out_features=2)
+
+    def forward(self, x):
+        x = self.resnet(x)
+        return x
+
 class MySet(Dataset):
     def __init__(self, data_path, label_file, enable_transform = True):
         self.current = 0
@@ -61,7 +81,7 @@ class MySet(Dataset):
         label_file = os.path.normpath(label_file)
         self.data = []
         if enable_transform:
-            transf = transforms.Compose([ transforms.ToPILImage(), transforms.RandomRotation(180), transforms.ToTensor(), weight.transforms(antialias=True)])
+            transf = transforms.Compose([ transforms.ToPILImage(), transforms.RandomRotation(180), transforms.ToTensor(), weight.transforms()])
             for file_name in os.listdir(data_path):
                 self.data += qfe(cv2.imread(os.path.join(data_path, file_name)), file_name, transf)
         else:

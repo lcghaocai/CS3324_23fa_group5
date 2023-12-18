@@ -22,28 +22,10 @@ num_workers = 8
 split_rate = 0.9
 lr = 1e-4
 epochs = 15
-fold_size = 5
+fold_size = 10
 weight = ResNet50_Weights.IMAGENET1K_V2
 first = True
 
-class ResNet50(nn.Module):
-    def __init__(self, weight):
-        super(ResNet50, self).__init__()
-        self.resnet = models.resnet50(weight)
-        num_features = self.resnet.fc.in_features
-        self.resnet.fc = nn.Linear(in_features=num_features, out_features=2)
-
-    def forward(self, x):
-        x = self.resnet(x)
-        return x
-def preprocess(image):
-    # TODO
-    return image
-def qfe(image, file_name, transf):
-    res_list = []
-    for i in range(qfe_size):
-        res_list.append([transf(image), file_name])
-    return res_list
 
 def train(epoch):
     net.train()
@@ -104,15 +86,16 @@ if __name__ == '__main__':
     log = log_init()
     
     raw_data = MySet( filedir + "/1-Images/1-Training Set", filedir + "/2-Groundtruths/HRDC Hypertensive Classification Training Labels.csv")
-    raw_size = len(raw_data)
+    raw_size = len(raw_data) // qfe_size
     train_size = int(raw_size * split_rate)
     test_size = raw_size - train_size
     raw_index = randperm(raw_size).tolist()
+    raw_index = sum(list(map(lambda x:[qfe_size*x, qfe_size*x+1, qfe_size*x+2], raw_index)), [])
     slice_data = []
     slice_size = raw_size // fold_size
     for i in range(fold_size):
         slice_data.append(torch.utils.data.Subset(raw_data, raw_index[slice_size * i:slice_size * (i + 1)]))
-    train_data = torch.utils.data.Subset(raw_data, raw_index[:train_size])
+    train_data = torch.utils.data.Subset(raw_data, raw_index[:])
     test_data = torch.utils.data.Subset(raw_data, raw_index[train_size:])
     # train_data, test_data = random_split(raw_data, [train_size, test_size])
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
