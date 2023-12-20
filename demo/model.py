@@ -32,74 +32,57 @@ class model:
     def __init__(self):
         self.resnet_checkpoint = "resnet50_imagenet_v2.pth"
         self.densenet_checkpoint = "densenet121_imagenet.pth"
+        self.vgg11_checkpoint = "vgg11_imagenet.pth"
         self.device = torch.device("cpu")
         self.resnet_model = None
         self.densenet_model = None
+        self.vgg11_model = None
 
     def load(self, dir_path):
-        """
-        load the model and weights.
-        dir_path is a string for internal use only - do not remove it.
-        all other paths should only contain the file name, these paths must be
-        concatenated with dir_path, for example: os.path.join(dir_path, filename).
-        make sure these files are in the same directory as the model.py file.
-        :param dir_path: path to the submission directory (for internal use only).
-        :return:
-        """
-        # # join paths
-        # checkpoint_path = os.path.join(dir_path, self.checkpoint)
-        # self.model = torch.load(checkpoint_path, map_location=self.device)
-        # self.model.to(self.device)
-        # self.model.eval()
-
-         # Load ResNet50 model
+        # Load ResNet50 model
         resnet_checkpoint_path = os.path.join(dir_path, self.resnet_checkpoint)
         self.resnet_model = torch.load(resnet_checkpoint_path, map_location=self.device)
         self.resnet_model.to(self.device)
         self.resnet_model.eval()
 
-         # Load DenseNet121 model
+        # Load DenseNet121 model
         densenet_checkpoint_path = os.path.join(dir_path, self.densenet_checkpoint)
-        densenet_checkpoint_path = os.path.join(dir_path, self.densenet_checkpoint)
-        print("DenseNet Checkpoint Path:", densenet_checkpoint_path)
-
         self.densenet_model = torch.load(densenet_checkpoint_path, map_location=self.device)
         self.densenet_model.to(self.device)
         self.densenet_model.eval()
 
-
-
-
-
+        # Load VGG11 model
+        vgg11_checkpoint_path = os.path.join(dir_path, self.vgg11_checkpoint)
+        self.vgg11_model = torch.load(vgg11_checkpoint_path, map_location=self.device)
+        self.vgg11_model.to(self.device)
+        self.vgg11_model.eval()
 
     def predict(self, input_image):
-        """
-        perform the prediction given an image.
-        input_image is a ndarray read using cv2.imread(path_to_image, 1).
-        note that the order of the three channels of the input_image read by cv2 is BGR.
-        :param input_image: the input image to the model.
-        :return: an int value indicating the class for the input image
-        """
-      
         # Transform the input image
-        transf = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor(), transforms.RandomRotation(180), weight.transforms()])
-        image = torch.unsqueeze(transf(input_image), 0)
+        transf = transforms.Compose([transforms.ToPILImage(), transforms.ToTensor(), transforms.RandomRotation(180)])
 
-        # Perform prediction using both models
+        # Transform the image for each model
+        resnet_image = torch.unsqueeze(transf(input_image), 0)
+        densenet_image = torch.unsqueeze(transf(input_image), 0)
+        vgg11_image = torch.unsqueeze(transf(input_image), 0)
+
+        # Perform prediction using each model
         with torch.no_grad():
-            resnet_score = self.resnet_model(image)
-            densenet_score = self.densenet_model(image)
+            resnet_score = self.resnet_model(resnet_image)
+            densenet_score = self.densenet_model(densenet_image)
+            vgg11_score = self.vgg11_model(vgg11_image)
 
-        # Voting mechanism
+        # Get predictions from each model
         resnet_pred = torch.argmax(resnet_score, 1).item()
         densenet_pred = torch.argmax(densenet_score, 1).item()
+        vgg11_pred = torch.argmax(vgg11_score, 1).item()
 
-        # If both models agree, return the prediction
-        if resnet_pred == densenet_pred:
-            return resnet_pred
-        else:
-            # If models disagree, i don't know what to do
-            return resnet_pred
+        # Voting mechanism
+        votes = [resnet_pred, densenet_pred, vgg11_pred]
+        final_prediction = max(set(votes), key=votes.count)
+
+        # Return the final prediction
+        return final_prediction
 
 
 
@@ -129,6 +112,35 @@ class DenseNet121(nn.Module):
 
     def forward(self, x):
         return self.densenet(x)
+    
+class VGG11(nn.Module):
+    def __init__(self, pretrained=True):
+        super(VGG11, self).__init__()
+        vgg11_model = models.vgg11(pretrained=pretrained)
+        
+        # 获取原始VGG11的输入通道数
+        in_features = vgg11_model.classifier[6].in_features
+
+        # 创建新的全连接层，输出类别数为2
+        vgg11_model.classifier[6] = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(in_features, 2)
+        )
+
+        self.features = vgg11_model.features
+        self.avgpool = vgg11_model.avgpool
+        self.classifier = vgg11_model.classifier
+
+    def forward(self, x):
+        #将输入 x 通过 VGG 的卷积层和池化层 (features) 进行特征提取。这一步包括多个卷积和池化操作，将输入的图像转换为一系列特征图
+        x = self.features(x)
+        #将特征图通过平均池化层 (avgpool) 进行全局平均池化。这一步将每个特征图的空间维度降为 1，得到每个通道的平均值
+        x = self.avgpool(x)
+        #将平均池化后的结果展平，将其形状变为一维，以便输入到全连接层。
+        x = x.view(x.size(0), -1)
+        #将展平后的数据通过全连接层 (classifier) 进行分类。这一步包括 Dropout 层和最后的线性层，得到模型的输出
+        x = self.classifier(x)
+        return x
 
 
 
