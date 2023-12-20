@@ -30,7 +30,7 @@ qfe_size = 4
 
 
 # 训练集图像路径
-train_image_dir = "/kaggle/input/trainingset/1-Images/1-Training Set/"
+train_image_dir = "F:/typora/DigitalImageProcessing/1-Hypertensive Classification/1-Images/1-Training Set"
 
 # 图像尺寸
 image_size = (224, 224)
@@ -59,8 +59,8 @@ for image_file in os.listdir(train_image_dir):
 mean /= num_images
 std /= num_images
 
-print("均值：", mean)
-print("标准差：", std)
+# print("mean:", mean)
+# print("std:", std)
 
 
 def preprocess(image):
@@ -166,7 +166,7 @@ if __name__ == '__main__':
     fh.setFormatter(formatter)
     log.addHandler(fh)  
     
-    raw_data = MySet( "/kaggle/input/trainingset/1-Images/1-Training Set",  "/kaggle/input/groundtruths/2-Groundtruths/HRDC Hypertensive Classification Training Labels.csv")
+    raw_data = MySet( "F:/typora/DigitalImageProcessing/1-Hypertensive Classification/1-Images/1-Training Set",  "F:/typora/DigitalImageProcessing/1-Hypertensive Classification/2-Groundtruths/HRDC Hypertensive Classification Training Labels.csv")
     train_size = int(len(raw_data) * split_rate)
     test_size = len(raw_data) - train_size
     raw_index = randperm(len(raw_data)).tolist()
@@ -190,6 +190,7 @@ if __name__ == '__main__':
     nn.Dropout(0.5),  # 添加Dropout层，丢弃概率为0.5
     nn.Linear(in_features, 2)
     )
+
     net.cuda()
     optimizer = optim.Adam(net.parameters(), lr = lr)
     decayRate = 0.96
