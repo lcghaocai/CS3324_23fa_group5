@@ -7,10 +7,12 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader, random_split
 import torchvision.models as models
 from torchvision import transforms
-from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet50, ResNet50_Weights, densenet121, DenseNet121_Weights
+import matplotlib.pyplot as plt
 
 filedir = '.'
 weight = ResNet50_Weights.IMAGENET1K_V2
+weight_densenet = DenseNet121_Weights.IMAGENET1K_V1
 qfe_size = 3
 
 class model:
@@ -60,7 +62,8 @@ def preprocess(image):
 def qfe(image, file_name, transf):
     res_list = []
     for i in range(qfe_size):
-        res_list.append([transf(image), file_name])
+        qfe_image = transf(image)
+        res_list.append([qfe_image, file_name])
     return res_list
 
 class ResNet50(nn.Module):

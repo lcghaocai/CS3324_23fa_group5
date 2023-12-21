@@ -4,4 +4,6 @@
 *.pth
 *.zip
 metadata
+__init__.py
+test.py
 log*
