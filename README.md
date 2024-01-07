@@ -1,6 +1,8 @@
 # CGI-HRDC 2023 - Hypertensive Retinopathy Diagnosis Challenge
 our solution to Task 1: Hypertension classification
+
 before starting, don't forget to load `1-Images`  and `2-Groundtruths` folder to current directory.
+
 our result is presented in `DenseNet` branch.
 ## train the model
 suppose you want to train `net_you_wanna_train`. run in terminal:
